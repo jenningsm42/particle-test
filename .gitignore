@@ -1,3 +1,6 @@
 .vs/
 x64/
 particles/x64/
+build/
+obj/
+.ycm_extra_conf.py

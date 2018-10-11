@@ -5,32 +5,37 @@
 #include "QuadTree.hpp"
 
 struct State {
-	bool updating = false;
-	bool showQuadtree = true;
+	bool updating = true;
+	bool showQuadtree = false;
 };
 
 int main() {
 	std::random_device rd;
 	auto generator = std::mt19937(rd());
 
-	const unsigned int width = 1024;
-	const unsigned int height = 768;
-	const size_t pointCount = 100;
-	const float radius = 5.f;
-	const float mass = 20.f;
-	const float initialMaxSpeed = 150.f;
-	const float accelerationFactor = 50.f / mass;
+	sf::RenderWindow window(sf::VideoMode(1024, 768), "Particles");
 
-	std::uniform_real_distribution<float> widthDistribution(radius, static_cast<float>(width) - radius);
-	std::uniform_real_distribution<float> heightDistribution(radius, static_cast<float>(height) - radius);
-	std::uniform_real_distribution<float> velocityDistribution(-initialMaxSpeed, initialMaxSpeed);
+    // To handle i3 automatically resizing window
+    auto windowSize = window.getSize();
+    const unsigned int width = windowSize.x;
+    const unsigned int height = windowSize.y;
 
-	auto boundary = Rectangle(0.f, 0.f, static_cast<float>(width), static_cast<float>(height));
+	const size_t pointCount = 1000;
+	const double radius = 0.5;
+	const double mass = 40.0;
+	const double initialMaxSpeed = 10.0;
+	const double accelerationFactor = 10.0 / mass;
 
-	//auto qtree = QuadTree(boundary, 4);
+	std::uniform_real_distribution<double> widthDistribution(radius, static_cast<double>(width) - radius);
+	std::uniform_real_distribution<double> heightDistribution(radius, static_cast<double>(height) - radius);
+	std::uniform_real_distribution<double> velocityDistribution(-initialMaxSpeed, initialMaxSpeed);
+
+	auto boundary = Rectangle(0, 0, width, height);
+
+	//auto qtree = QuadTree(boundary, 1);
 
 	Point points[pointCount];
-	for (int i = 0; i < pointCount; i++) {
+	for (size_t i = 0; i < pointCount; i++) {
 		points[i] = Point(
 			widthDistribution(generator),
 			heightDistribution(generator),
@@ -40,10 +45,8 @@ int main() {
 		//qtree.insert(&points[i]);
 	}
 
-	sf::RenderWindow window(sf::VideoMode(width, height), "Particles");
-
-	sf::CircleShape particle(radius);
-	particle.setFillColor(sf::Color::White);
+	sf::CircleShape particle(std::max(1.f, static_cast<float>(radius)));
+	particle.setFillColor(sf::Color::Blue);
 	particle.setOrigin(radius, radius);
 
 	sf::RectangleShape rectangle;
@@ -74,12 +77,12 @@ int main() {
 
 		if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
 			auto m = sf::Mouse::getPosition(window);
-			mx = static_cast<float>(m.x);
-			my = static_cast<float>(m.y);
+			mx = static_cast<double>(m.x);
+			my = static_cast<double>(m.y);
 			mouseClicked = true;
 		}
 
-		float deltaTime = clock.restart().asSeconds();
+		double deltaTime = clock.restart().asSeconds();
 		window.setTitle("Particles | fps: " + std::to_string(1.f / deltaTime));
 
 		QuadTree qtree(boundary, 4);
@@ -89,18 +92,24 @@ int main() {
 
 		if (state.updating) {
 			// Particle collision detection
+            std::unordered_set<Point*> visited;
 			for (auto& p : points) {
-				Circle range(p.x, p.y, 2.f * radius);
+				Circle range(p.x, p.y, 2.0 * radius);
+
 				auto collidingPoints = qtree.query(range);
 				for (auto& c : collidingPoints) {
 					if (&p == c) continue;
+                    if (visited.count(c) > 0) continue;
 
-					float dx = c->x - p.x;
-					float dy = c->y - p.y;
-					float d = std::max(std::min(sqrtf(dx*dx + dy*dy), 2.f * radius), radius);
-					float nx = dx / d;
-					float ny = dy / d;
-					float pval = 2.f * (p.vx * nx + p.vy * ny - c->vx * nx + c->vy * ny) / (p.m + c->m);
+                    visited.insert(c);
+
+					double dx = c->x - p.x;
+					double dy = c->y - p.y;
+                    double d2 = std::min(std::max(radius, dx * dx + dy * dy), 2.0 * radius);
+					double d = sqrt(d2);
+					double nx = dx / d;
+					double ny = dy / d;
+					double pval = 2.0 * (p.vx * nx + p.vy * ny - c->vx * nx + c->vy * ny) / (p.m + c->m);
 
 					p.vx = p.vx - pval * p.m * nx;
 					p.vy = p.vy - pval * p.m * ny;
@@ -108,9 +117,10 @@ int main() {
 					c->vx = c->vx + pval * c->m * nx;
 					c->vy = c->vy + pval * c->m * ny;
 
-					p.update(2.f * deltaTime);
-					c->update(2.f * deltaTime);
+					c->update(2.0 * deltaTime);
 				}
+
+                p.update(2.0 * deltaTime);
 			}
 
 			// Particle movement update
@@ -120,8 +130,8 @@ int main() {
 					p.ay = (my - p.y) * accelerationFactor;
 				}
 				else {
-					p.ax = 0.f;
-					p.ay = 0.f;
+					p.ax = 0.0;
+					p.ay = 0.0;
 				}
 
 				p.update(deltaTime);
@@ -137,7 +147,6 @@ int main() {
 				}
 			}
 
-			std::cout << qtree.count() << std::endl;
 			//qtree.update();
 		}
 

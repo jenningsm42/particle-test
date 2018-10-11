@@ -5,18 +5,9 @@
 QuadTree::QuadTree(const Rectangle& boundary, size_t capacity) : m_boundary(boundary), m_capacity(capacity), m_subdivided(false) {
 }
 
-QuadTree::QuadTree(const QuadTree& other) : m_boundary(other.m_boundary), m_capacity(other.m_capacity), m_subdivided(other.m_subdivided) {
-	std::copy(other.m_points.begin(), other.m_points.end(), m_points.begin());
-	if (m_subdivided) {
-		m_northWest = std::make_unique<QuadTree>(QuadTree(*other.m_northWest.get()));
-		m_northEast = std::make_unique<QuadTree>(QuadTree(*other.m_northEast.get()));
-		m_southWest = std::make_unique<QuadTree>(QuadTree(*other.m_southWest.get()));
-		m_southEast = std::make_unique<QuadTree>(QuadTree(*other.m_southEast.get()));
-	}
-}
-
 bool QuadTree::insert(Point* p) noexcept {
-	if (!m_boundary.contains(*p)) {
+    const auto& point = *p;
+	if (!m_boundary.contains(point)) {
 		return false;
 	}
 
@@ -29,10 +20,17 @@ bool QuadTree::insert(Point* p) noexcept {
 		subdivide();
 	}
 
-	return m_northWest->insert(p) ||
-		m_northEast->insert(p) ||
-		m_southWest->insert(p) ||
-		m_southEast->insert(p);
+    if (m_northWest->m_boundary.contains(point)) {
+        return m_northWest->insert(p);
+    }
+    else if (m_northEast->m_boundary.contains(point)) {
+        return m_northEast->insert(p);
+    }
+    else if (m_southWest->m_boundary.contains(point)) {
+        return m_southWest->insert(p);
+    } else {
+        return m_southEast->insert(p);
+    }
 }
 
 std::vector<Point*> QuadTree::query(const BoundingShape& range) const noexcept {
@@ -52,22 +50,21 @@ void QuadTree::update() noexcept {
 
 std::vector<Rectangle> QuadTree::getRectangles() const noexcept {
 	std::vector<Rectangle> rectangles;
+    rectangles.push_back(m_boundary);
 	getRectanglesRecursive(rectangles);
 	return rectangles;
 }
 
-QuadTree& QuadTree::operator= (const QuadTree& other) {
-	return QuadTree(other);
-}
-
 void QuadTree::subdivide() noexcept {
-	auto half_w = m_boundary.w / 2.f;
-	auto half_h = m_boundary.h / 2.f;
+	auto half_w = m_boundary.w / 2;
+	auto half_h = m_boundary.h / 2;
+    auto remainder_w = m_boundary.w % 2;
+    auto remainder_h = m_boundary.h % 2;
 
-	auto nw = Rectangle(m_boundary.x, m_boundary.y, half_w, half_h);
-	auto ne = Rectangle(m_boundary.x + half_w, m_boundary.y, half_w, half_h);
-	auto sw = Rectangle(m_boundary.x, m_boundary.y + half_h, half_w, half_h);
-	auto se = Rectangle(m_boundary.x + half_w, m_boundary.y + half_h, half_w, half_h);
+	auto nw = Rectangle(m_boundary.x, m_boundary.y, half_w + remainder_w, half_h + remainder_h);
+	auto ne = Rectangle(m_boundary.x + half_w + 1, m_boundary.y, half_w, half_h + remainder_h);
+	auto sw = Rectangle(m_boundary.x, m_boundary.y + half_h + 1, half_w + remainder_w, half_h);
+	auto se = Rectangle(m_boundary.x + half_w + 1, m_boundary.y + half_h + 1, half_w, half_h);
 
 	m_northWest = std::make_unique<QuadTree>(nw, m_capacity);
 	m_northEast = std::make_unique<QuadTree>(ne, m_capacity);
@@ -96,10 +93,18 @@ void QuadTree::queryRecursive(const BoundingShape& range, std::vector<Point*>& f
 	}
 
 	if (m_subdivided) {
-		m_northWest->queryRecursive(range, found);
-		m_northEast->queryRecursive(range, found);
-		m_southWest->queryRecursive(range, found);
-		m_southEast->queryRecursive(range, found);
+        if (range.bb.overlaps(m_northWest->m_boundary.bb)) {
+            m_northWest->queryRecursive(range, found);
+        }
+        if (range.bb.overlaps(m_northEast->m_boundary.bb)) {
+            m_northEast->queryRecursive(range, found);
+        }
+        if (range.bb.overlaps(m_southWest->m_boundary.bb)) {
+            m_southWest->queryRecursive(range, found);
+        }
+        if (range.bb.overlaps(m_southEast->m_boundary.bb)) {
+            m_southEast->queryRecursive(range, found);
+        }
 	}
 }
 
@@ -131,5 +136,5 @@ size_t QuadTree::count() const noexcept {
 		return m_points.size();
 	}
 
-	return m_northWest->count() + m_northEast->count() + m_southWest->count() + m_southEast->count() + m_points.size();
+	return m_points.size() + m_northWest->count() + m_northEast->count() + m_southWest->count() + m_southEast->count();
 }
